@@ -1,0 +1,244 @@
+REPORT z_screens6.
+
+*variáveis
+TABLES: zemployess.
+
+TYPE-POOLS: slis.
+
+DATA: it_zemployess  TYPE TABLE OF zemployess,
+      lo_grid_100    TYPE REF TO cl_gui_alv_grid,
+      lv_okcode_100  TYPE sy-ucomm,
+      lt_fieldcat    TYPE lvc_t_fcat,
+      ls_layout_100  TYPE lvc_s_layo,
+      ls_variant_100 TYPE disvariant,
+      lt_tool_bar    TYPE ui_functions.
+
+*tela de seleção
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE text-000.
+
+SELECTION-SCREEN SKIP.
+SELECT-OPTIONS: so_id      FOR zemployess-employee NO INTERVALS,
+                so_frnme   FOR zemployess-forename NO INTERVALS,
+                so_srnme   FOR zemployess-surname  NO INTERVALS,
+                so_dob     FOR zemployess-dob,
+                so_gndr    FOR zemployess-gender   NO INTERVALS,
+                so_loct    FOR zemployess-zzlocat  NO INTERVALS,
+                so_dept    FOR zemployess-zzdept   NO INTERVALS.
+
+SELECTION-SCREEN SKIP.
+PARAMETERS: p_basic RADIOBUTTON GROUP 1,
+            p_compl RADIOBUTTON GROUP 1 DEFAULT 'X'.
+
+SELECTION-SCREEN END OF BLOCK b1.
+
+*execução
+START-OF-SELECTION.
+  PERFORM f_obtem_dados.
+
+*funções
+FORM f_obtem_dados.
+
+  SELECT *
+    FROM zemployess
+    INTO TABLE it_zemployess[]
+    WHERE      employee IN so_id[]
+           AND forename IN so_frnme[]
+           AND surname  IN so_srnme[]
+           AND dob      IN so_dob[]
+           AND gender   IN so_gndr[]
+           AND zzlocat  IN so_loct[]
+           AND zzdept   IN so_dept[].
+
+  IF p_basic     EQ 'X'.
+    PERFORM f_exibir_alv_basico.
+  ELSEIF p_compl EQ 'X'.
+    PERFORM f_exibir_alv_completo.
+  ENDIF.
+
+ENDFORM.
+
+FORM f_exibir_alv_basico.
+
+  DATA: ls_fieldcat_basico TYPE slis_t_fieldcat_alv,
+        ls_layout_basico   TYPE slis_layout_alv.
+
+  CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+    EXPORTING
+      i_structure_name = 'zemployess'
+    CHANGING
+      ct_fieldcat      = ls_fieldcat_basico[].
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      is_layout     = ls_layout_basico
+      it_fieldcat   = ls_fieldcat_basico[]
+    TABLES
+      t_outtab      = it_zemployess[]
+    EXCEPTIONS
+      program_error = 1
+      OTHERS        = 2.
+
+ENDFORM.
+
+FORM f_exibir_alv_completo.
+
+  IF it_zemployess IS NOT INITIAL.
+    CALL SCREEN 100.
+  ELSE.
+    MESSAGE 'Dados não localizados' TYPE 'S' DISPLAY LIKE 'E'.
+  ENDIF.
+
+ENDFORM.
+
+MODULE user_command_0100 INPUT.
+
+  CASE lv_okcode_100.
+    WHEN 'BACK'.
+      LEAVE TO SCREEN 0.
+    WHEN 'EXIT'.
+      LEAVE PROGRAM.
+  ENDCASE.
+
+ENDMODULE.
+
+MODULE status_0100 OUTPUT.
+
+  SET PF-STATUS 'STATUS100'.
+  SET TITLEBAR  'TITLE100'.
+
+ENDMODULE.
+
+MODULE m_show_grid_100 OUTPUT.
+
+ FREE: lt_fieldcat[].
+
+ ls_variant_100-report = sy-repid.
+
+ PERFORM f_remove_alv_buttons.
+ PERFORM f_instancia_fieldcat.
+ PERFORM f_instancia_grid.
+
+ENDMODULE.
+
+FORM f_build_fieldcat USING VALUE(p_fieldname)  TYPE c
+                            VALUE(p_field)      TYPE c
+                            VALUE(p_table)      TYPE c
+                            VALUE(p_coltext)    TYPE c
+                            VALUE(p_outputlen)  TYPE i
+                            CHANGING t_fieldcat TYPE lvc_t_fcat.
+
+  DATA: ls_fieldcat LIKE LINE OF t_fieldcat[].
+
+           ls_fieldcat-fieldname = p_fieldname.
+           ls_fieldcat-ref_field = p_field.
+           ls_fieldcat-ref_table = p_table.
+           ls_fieldcat-coltext   = p_coltext.
+           ls_fieldcat-outputlen = p_outputlen.
+
+  APPEND   ls_fieldcat TO t_fieldcat[].
+
+ENDFORM.
+
+FORM f_instancia_fieldcat.
+
+ PERFORM f_build_fieldcat USING:
+        'employee'  'employee' 'ZEMPLOYESS'  'ID Funcionário'         10   CHANGING lt_fieldcat[],
+        'forename'  'forename' 'ZEMPLOYESS'  'Nome'                   20   CHANGING lt_fieldcat[],
+        'surname '  'surname ' 'ZEMPLOYESS'  'Sobrenome'              20   CHANGING lt_fieldcat[],
+        'dob     '  'dob     ' 'ZEMPLOYESS'  'Data de Nascimento'     10   CHANGING lt_fieldcat[],
+        'gender  '  'gender  ' 'ZEMPLOYESS'  'Gênero'                 07   CHANGING lt_fieldcat[],
+        'zzlocat '  'zzlocat ' 'ZEMPLOYESS'  'Localização'            15   CHANGING lt_fieldcat[],
+        'zzdept  '  'zzdept  ' 'ZEMPLOYESS'  'Departamento'           15   CHANGING lt_fieldcat[].
+
+
+ENDFORM.
+
+FORM f_instancia_grid.
+
+ IF lo_grid_100 IS INITIAL.
+
+    lo_grid_100 = NEW cl_gui_alv_grid( i_parent = cl_gui_custom_container=>default_screen ).
+
+    lo_grid_100->set_gridtitle( 'Lista de Funcionários' ).
+
+    lo_grid_100->set_ready_for_input( 1 ).
+
+    lo_grid_100->set_table_for_first_display(
+       EXPORTING
+          is_variant           = ls_variant_100
+          is_layout            = ls_layout_100
+          i_save               = 'A'
+          it_toolbar_excluding = lt_tool_bar[]
+       CHANGING
+          it_fieldcatalog = lt_fieldcat[]
+          it_outtab       = it_zemployess[] ).
+
+ ELSE.
+   lo_grid_100->refresh_table_display( ).
+
+ ENDIF.
+
+ENDFORM.
+
+FORM f_remove_alv_buttons.
+
+  APPEND cl_gui_alv_grid=>mc_evt_delayed_change_select   TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_evt_delayed_move_curr_cell  TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_evt_enter                   TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_evt_modified                TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_auf                      TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_average                  TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_back_classic             TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_abc                 TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_chain               TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_crbatch             TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_crweb               TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_lineitems           TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_master_data         TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_more                TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_report              TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_xint                TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_call_xxl                 TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_check                    TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_col_invisible            TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_col_optimize             TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_count                    TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_current_variant          TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_data_save                TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_delete_filter            TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_deselect_all             TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_detail                   TO lt_tool_bar[].
+*  APPEND cl_gui_alv_grid=>mc_fc_excl_all                 TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_expcrdata                TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_expcrdesig               TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_expcrtempl               TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_expmdb                   TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_extend                   TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_f4                       TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_filter                   TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_find                     TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_fix_columns              TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_graph                    TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_help                     TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_info                     TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_load_variant             TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_append_row           TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_copy                 TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_copy_row             TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_cut                  TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_delete_row           TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_insert_row           TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_move_row             TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_paste                TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_paste_new_row        TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_loc_undo                 TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_maintain_variant         TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_maximum                  TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_minimum                  TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_pc_file                  TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_print                    TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_print_back               TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_print_prev               TO lt_tool_bar[].
+  APPEND cl_gui_alv_grid=>mc_fc_refresh                  TO lt_tool_bar[].
+
+ENDFORM.
