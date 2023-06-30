@@ -15,7 +15,7 @@ TYPES: id    TYPE icon-id,
 
 CLASS lcl_event_grid DEFINITION.
   PUBLIC SECTION.
-  
+
     METHODS:
       data_changed
          FOR EVENT data_changed
@@ -26,7 +26,7 @@ CLASS lcl_event_grid DEFINITION.
                                       e_ucomm.
 
 ENDCLASS.
-  
+
 
 
 
@@ -37,7 +37,7 @@ DATA: it_zemployess  TYPE TABLE OF ly_zemployess,
       ls_layout_100  TYPE lvc_s_layo,
       ls_variant_100 TYPE disvariant,
       lt_tool_bar    TYPE ui_functions,
-      lo_event_grid  TYPE REF TO lcl_event_grid .
+      lo_event_grid  TYPE REF TO lcl_event_grid.
 
 *tela de seleção
 SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE text-000.
@@ -59,9 +59,9 @@ SELECTION-SCREEN END OF BLOCK b1.
 
 *obs. ententer implementação
 CLASS lcl_event_grid IMPLEMENTATION.
-  
+
   METHOD data_changed.
-    
+
     LOOP AT er_data_changed->mt_good_cells[] ASSIGNING FIELD-SYMBOL(<fs_good_cells>).
       READ TABLE it_zemployess[] ASSIGNING FIELD-SYMBOL(<fs_it_zemployess>) INDEX <fs_good_cells>-row_id.
       CASE <fs_good_cells>-fieldname.
@@ -69,10 +69,10 @@ CLASS lcl_event_grid IMPLEMENTATION.
           <fs_it_zemployess>-salary = <fs_good_cells>-value.
       ENDCASE.
     ENDLOOP.
-    
-  ENDMETHOD.  
-  
-ENDCLASS.  
+
+  ENDMETHOD.
+
+ENDCLASS.
 
 *execução
 START-OF-SELECTION.
@@ -92,6 +92,18 @@ FORM f_obtem_dados.
            AND zzlocat  IN so_loct[]
            AND zzdept   IN so_dept[].
 
+  PERFORM f_assign_icons_colors.
+
+  IF p_basic     EQ 'X'.
+    PERFORM f_exibir_alv_basico.
+  ELSEIF p_compl EQ 'X'.
+    PERFORM f_exibir_alv_completo.
+  ENDIF.
+
+ENDFORM.
+
+FORM f_assign_icons_colors.
+
   LOOP AT it_zemployess[] ASSIGNING FIELD-SYMBOL(<fs_zemployess>).
     IF <fs_zemployess>-gender  EQ 'M' OR <fs_zemployess>-gender EQ 'F'.
       <fs_zemployess>-color   = '   '.
@@ -104,12 +116,6 @@ FORM f_obtem_dados.
       <fs_zemployess>-id = icon_red_light.
     ENDIF.
   ENDLOOP.
-
-  IF p_basic     EQ 'X'.
-    PERFORM f_exibir_alv_basico.
-  ELSEIF p_compl EQ 'X'.
-    PERFORM f_exibir_alv_completo.
-  ENDIF.
 
 ENDFORM.
 
@@ -152,6 +158,16 @@ MODULE user_command_0100 INPUT.
   CASE lv_okcode_100.
     WHEN 'BACK'.
       LEAVE TO SCREEN 0.
+    WHEN 'GRAVAR'.
+      MODIFY zemployess FROM TABLE it_zemployess[].
+      IF sy-subrc EQ 0.
+      PERFORM f_assign_icons_colors.
+      lo_grid_100->refresh_table_display( ).
+      MESSAGE 'Dados salvos!' TYPE 'S'.
+      ELSE.
+       MESSAGE 'Erro! Os dados não foram salvos!' TYPE 'E'. 
+      ENDIF.
+
     WHEN 'EXIT'.
       LEAVE PROGRAM.
   ENDCASE.
@@ -228,7 +244,7 @@ FORM f_instancia_grid.
     lo_grid_100 = NEW cl_gui_alv_grid( i_parent = cl_gui_custom_container=>default_screen ).
 
     lo_event_grid = NEW lcl_event_grid( ).
-  
+
     lo_grid_100->set_gridtitle( 'Lista de Funcionários' ).
 
     lo_grid_100->set_ready_for_input( 1 ).
@@ -248,7 +264,8 @@ FORM f_instancia_grid.
           it_fieldcatalog = lt_fieldcat[]
           it_outtab       = it_zemployess[] ).
 
-    set HANDLER lo_event_grid->data_changed FOR lo_grid_100.
+    "entender linha abaixo
+    SET HANDLER lo_event_grid->data_changed FOR lo_grid_100.
 
   ELSE.
     lo_grid_100->refresh_table_display( ).
